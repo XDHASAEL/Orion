@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventario Orión</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#0b0f12;--card:#161b22;--bd:#30363d;--mut:#8b949e;--ac:#2b78a0;--ok:#238636}
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body{background:var(--bg);color:#fff;padding:15px}
+.wrap{max-width:600px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+button,input,select{font-size:14px;color:#fff}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px}
+.center.on{display:flex;min-height:80vh;align-items:center;justify-content:center}
+.center .box{width:100%;max-width:380px}
+h1{font-size:24px}
+.top{display:flex;justify-content:space-between;align-items:center;margin:10px 0 18px;gap:10px}
+.row{display:flex;gap:8px;align-items:center}
+.ic{background:var(--card);border:1px solid var(--bd);border-radius:50%;width:42px;height:42px;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cat{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:30px 10px;cursor:pointer;font-weight:700;font-size:18px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.cat small{font-size:12px;color:var(--mut);font-weight:400}
+label{display:block;font-size:12px;color:var(--mut);font-weight:600;margin:10px 0 4px}
+input,select{width:100%;padding:10px;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
+.btn{background:var(--ok);border:0;border-radius:6px;padding:10px;font-weight:700;width:100%;cursor:pointer;margin-top:14px}
+.btn:disabled{opacity:.5}
+.pill{background:var(--ac);border:0;border-radius:20px;padding:8px 16px;font-weight:600;cursor:pointer;white-space:nowrap}
+.link{background:none;border:0;color:var(--ac);font-weight:600;cursor:pointer;display:block;margin:8px 0 4px}
+.list{background:#121414;border-radius:10px;overflow:hidden}
+.item{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid #1f2223}
+.item img{width:48px;height:48px;border-radius:6px;object-fit:cover;background:#202425;flex:none}
+.inf{flex:1;min-width:0}
+.inf b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inf small{display:block;color:var(--mut);font-size:12px;margin:2px 0 4px}
+.qty{display:flex;align-items:center;gap:6px;font-size:13px}
+.qty.low span{color:#ff7b72}
+.qty button,.x{background:#202425;border:1px solid var(--bd);border-radius:6px;width:30px;height:30px;cursor:pointer;flex:none}
+.x{color:#ff4a4a}.ed{color:#f39c12}
+.st{font-size:12px;color:var(--mut);text-align:center;margin:8px 0}
+.err{color:#ff7b72}
+.empty{padding:24px;text-align:center;color:var(--mut)}
+.hide{display:none!important}
+</style></head><body>
+<div class="wrap">
+
+<section class="view center on" id="v-login">
+<form class="box" id="f-login"><h1>⭐ Orión</h1>
+<label for="le">Correo</label><input id="le" type="email" autocomplete="email" required>
+<label for="lp">Contraseña</label><input id="lp" type="password" minlength="6" autocomplete="current-password" required>
+<p class="st err" id="lmsg"></p>
+<button class="btn" id="lbtn">Entrar</button>
+<button type="button" class="link" id="ltoggle">Crear cuenta nueva</button></form>
+</section>
+
+<section class="view center" id="v-setup"><div class="box"><h1>Bienvenido</h1>
+<p class="st">Tu cuenta aún no pertenece a ninguna tienda.</p>
+<p class="st"><b>Si eres empleado:</b> pide al administrador que te agregue con tu correo y luego recarga.</p>
+<button class="btn" data-a="reload">Ya me agregaron (recargar)</button>
+<hr style="border-color:var(--bd);margin:18px 0">
+<form id="f-setup"><p class="st"><b>Solo si eres el dueño:</b> crea la tienda.</p>
+<label for="so">Nombre de la tienda</label><input id="so" maxlength="60" required>
+<label for="sn">Tu nombre</label><input id="sn" maxlength="60" required>
+<button class="btn" id="sb">Crear tienda</button></form>
+<button class="link" data-a="out">Salir</button></div></section>
+
+<section class="view" id="v-home">
+<div class="top"><div><h1>⭐ Orión</h1><div class="st" id="who" style="text-align:left"></div></div>
+<div class="row"><button class="ic" id="bman" data-a="manage" title="Configuración" aria-label="Configuración">⚙️</button>
+<button class="ic" data-a="out" title="Salir" aria-label="Salir">🔒</button></div></div>
+<div class="grid" id="grid"></div>
+</section>
+
+<section class="view" id="v-manage">
+<div class="top"><div><button class="link" data-a="home">‹ Volver</button><h1>Configuración</h1></div>
+<button class="pill" data-a="newsec">+ Sección</button></div>
+<form class="box hide" id="f-sec"><input type="hidden" id="sid">
+<label for="sic">Icono y nombre</label>
+<div class="row"><input id="sic" style="width:70px;text-align:center" maxlength="4" placeholder="📦" required>
+<input id="snm" aria-label="Nombre" placeholder="Ej: Outlet" maxlength="30" required></div>
+<button class="btn" id="sbtn">Guardar sección</button></form>
+<div class="list" id="mlist"></div>
+<form class="box hide" id="f-mem" style="margin-top:16px"><b>Agregar miembro</b>
+<p class="st" style="text-align:left">La persona debe crear su cuenta primero.</p>
+<label for="me_">Correo</label><input id="me_" type="email" required>
+<label for="mr">Rol</label><select id="mr"><option value="empleado">Empleado (consulta y resta)</option><option value="acomodador">Acomodador (agrega y edita)</option><option value="admin">Administrador</option></select>
+<button class="btn">Agregar</button></form>
+</section>
+
+<section class="view" id="v-prod">
+<div class="top"><div><button class="link" data-a="home">‹ Secciones</button><h1 id="ptitle"></h1></div>
+<button class="pill" id="bnew" data-a="newprod">+ Agregar</button></div>
+<form class="box hide" id="f-prod"><input type="hidden" id="pid">
+<label for="pc">Código</label><input id="pc" maxlength="30" required>
+<label for="pn">Nombre / Modelo</label><input id="pn" maxlength="80" required>
+<label for="pt">Tallas</label><input id="pt" maxlength="60" placeholder="22, 24, 25" required>
+<div id="pqw"><label for="pq">Stock inicial</label><input id="pq" type="number" min="0" step="1" required></div>
+<label for="pf">Foto (opcional)</label><input id="pf" type="file" accept="image/*">
+<button class="btn" id="pbtn">Guardar artículo</button></form>
+<input id="q" type="search" placeholder="Buscar por nombre, código o talla" aria-label="Buscar" style="margin-bottom:8px">
+<div class="st" id="tot"></div>
+<div class="list" id="plist"></div>
+</section>
+
+</div>
+<canvas id="cv" width="224" height="224" class="hide"></canvas>
+
+<script>
+const URL_='https://fjrfhxvsqhooxxwixuhk.supabase.co',KEY='sb_publishable_AVNQ7j-TkenFHdpQxt0obA_BRlepSrV';
+const $=id=>document.getElementById(id);
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PH='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#555"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>');
+let sb,me=null,cats=[],sec=null,items=[],reg=false,tm,ch;
+const q=async p=>{const{data,error}=await p;if(error)throw error;return data};
+const can=()=>me&&me.rol!=='empleado';
+const msg=t=>$('lmsg').textContent=t;
+const tr=m=>({'Invalid login credentials':'Correo o contraseña incorrectos.','User already registered':'Ese correo ya está registrado.'}[m]||m);
+
+/* ---------- Arranque y sesión ---------- */
+(async()=>{
+ if(!window.supabase)return msg('No cargó la librería. Revisa tu internet y recarga.');
+ sb=supabase.createClient(URL_,KEY);
+ try{const{data:{session}}=await sb.auth.getSession();if(session)await enter()}catch(e){msg(e.message)}
+})();
+
+async function enter(){
+ const{data:{user}}=await sb.auth.getUser();
+ if(!user)return go('login');
+ me=await q(sb.from('perfiles').select('nombre,rol,org_id,organizaciones(nombre)').eq('id',user.id).maybeSingle());
+ if(!me)return go('setup');
+ me.org=me.organizaciones?.nombre||'';
+ $('bman').classList.toggle('hide',!can());
+ listen();go('home')}
+
+$('ltoggle').onclick=()=>{reg=!reg;$('lbtn').textContent=reg?'Crear cuenta':'Entrar';$('ltoggle').textContent=reg?'Ya tengo cuenta':'Crear cuenta nueva';msg('')};
+$('f-login').onsubmit=async e=>{e.preventDefault();msg('');const b=$('lbtn');b.disabled=true;
+ try{if(!sb)throw Error('Sin conexión con el servidor.');
+  const c={email:$('le').value.trim(),password:$('lp').value};
+  const r=reg?await sb.auth.signUp(c):await sb.auth.signInWithPassword(c);
+  if(r.error)throw r.error;
+  if(!r.data.session)throw Error('Cuenta creada. Confirma tu correo e inicia sesión.');
+  $('lp').value='';await enter()
+ }catch(err){msg(tr(err.message))}finally{b.disabled=false}};
+
+$('f-setup').onsubmit=async e=>{e.preventDefault();$('sb').disabled=true;
+ try{await q(sb.rpc('crear_organizacion',{p_org:$('so').value.trim(),p_nombre:$('sn').value.trim()}));await enter()}
+ catch(err){alert(err.message)}finally{$('sb').disabled=false}};
+
+async function salir(){if(ch){sb.removeChannel(ch);ch=null}await sb.auth.signOut();me=null;sec=null;items=[];cats=[];go('login')}
+
+/* ---------- Navegación ---------- */
+function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));
+ if(v==='home')drawHome();if(v==='manage')drawManage()}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-a]'),s=e.target.closest('[data-s]');
+ if(a)act(a.dataset.a,a);else if(s)openSec(s.dataset.s)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.s)openSec(e.target.dataset.s)});
+
+async function drawHome(){
+ $('who').textContent=`${me.org} · ${me.rol}`;
+ try{cats=await q(sb.from('secciones').select('*,productos(count)').order('nombre'));
+  $('grid').innerHTML=cats.map(c=>`<div class="cat" role="button" tabindex="0" data-s="${c.id}"><span style="font-size:30px">${E(c.icono)}</span>${E(c.nombre)}<small>${c.productos?.[0]?.count||0} artículos</small></div>`).join('')||'<p class="empty">Sin secciones.</p>'}
+ catch(err){$('grid').innerHTML=`<p class="empty err">${E(err.message)}</p>`}}
+
+async function drawManage(){
+ $('f-mem').classList.toggle('hide',me.rol!=='admin');
+ try{cats=await q(sb.from('secciones').select('*').order('nombre'));
+  $('mlist').innerHTML=cats.map(c=>`<div class="item"><span>${E(c.icono)}</span><div class="inf"><b>${E(c.nombre)}</b></div><button class="x ed" data-a="esec" data-id="${c.id}" aria-label="Editar">✏️</button><button class="x" data-a="dsec" data-id="${c.id}" aria-label="Eliminar">✕</button></div>`).join('')}
+ catch(err){alert(err.message)}}
+
+async function act(a,el){const id=el.dataset.id;try{switch(a){
+ case'reload':location.reload();break;
+ case'home':go('home');break;
+ case'manage':go('manage');break;
+ case'out':await salir();break;
+ case'newsec':$('f-sec').reset();$('sid').value='';$('sbtn').textContent='Guardar sección';$('f-sec').classList.remove('hide');break;
+ case'esec':{const c=cats.find(x=>x.id===id);$('sid').value=id;$('sic').value=c.icono;$('snm').value=c.nombre;$('sbtn').textContent='Actualizar sección';$('f-sec').classList.remove('hide');break}
+ case'dsec':if(confirm('¿Eliminar esta sección y todos sus artículos?')){await q(sb.from('secciones').delete().eq('id',id));await drawManage()}break;
+ case'newprod':{const f=$('f-prod'),was=!f.classList.contains('hide')&&!$('pid').value;f.reset();$('pid').value='';$('pqw').classList.remove('hide');$('pq').required=true;$('pbtn').textContent='Guardar artículo';f.classList.toggle('hide',was);break}
+ case'eprod':{const p=items.find(x=>x.id===id);$('pid').value=id;$('pc').value=p.codigo;$('pn').value=p.nombre;$('pt').value=p.tallas;$('pf').value='';$('pqw').classList.add('hide');$('pq').required=false;$('pbtn').textContent='Actualizar artículo';$('f-prod').classList.remove('hide');scrollTo(0,0);break}
+ case'dprod':if(confirm('¿Eliminar este artículo?')){await q(sb.from('productos').delete().eq('id',id));await loadProds()}break;
+ case'minus':await mover(id,'venta',1);break;
+ case'plus':await mover(id,'entrada',1);break;
+ case'nmov':{const v=parseInt(prompt('Unidades (negativo = venta, positivo = entrada):'),10);if(v)await mover(id,v<0?'venta':'entrada',Math.abs(v));break}
+ }}catch(err){alert(err.message)}}
+
+/* ---------- Secciones y miembros ---------- */
+$('f-sec').onsubmit=async e=>{e.preventDefault();const id=$('sid').value,v={icono:$('sic').value.trim(),nombre:$('snm').value.trim()};
+ try{if(id)await q(sb.from('secciones').update(v).eq('id',id));else await q(sb.from('secciones').insert({...v,org_id:me.org_id}));
+  e.target.reset();$('sid').value='';$('sbtn').textContent='Guardar sección';$('f-sec').classList.add('hide');await drawManage()
+ }catch(err){alert(err.code==='23505'?'Ya existe una sección con ese nombre.':err.message)}};
+$('f-mem').onsubmit=async e=>{e.preventDefault();
+ try{await q(sb.rpc('agregar_miembro',{p_email:$('me_').value.trim(),p_rol:$('mr').value}));alert('Miembro agregado. Que recargue la app.');e.target.reset()}
+ catch(err){alert(err.message)}};
+
+/* ---------- Productos ---------- */
+async function openSec(id){sec=cats.find(c=>c.id===id);$('ptitle').textContent=sec.icono+' '+sec.nombre;
+ $('q').value='';$('f-prod').classList.add('hide');$('bnew').classList.toggle('hide',!can());go('prod');await loadProds()}
+async function loadProds(){
+ try{items=await q(sb.from('productos').select('*').eq('seccion_id',sec.id).order('nombre'));drawProds()}
+ catch(err){$('plist').innerHTML=`<p class="empty err">${E(err.message)}</p>`}}
+function drawProds(){
+ const s=$('q').value.toLowerCase().trim(),w=can();
+ const arr=items.filter(p=>[p.nombre,p.codigo,p.tallas].some(v=>(v||'').toLowerCase().includes(s)));
+ $('tot').textContent=`${items.length} artículos · ${items.reduce((n,p)=>n+p.stock,0)} uds en total`;
+ $('plist').innerHTML=arr.map(p=>`<div class="item"><img src="${E(p.foto&&p.foto.startsWith('data:image/')?p.foto:PH)}" alt="">
+<div class="inf"><b>${E(p.nombre)}</b><small>${E(p.codigo)} · Tallas: ${E(p.tallas)}</small>
+<div class="qty ${p.stock<=2?'low':''}"><button data-a="minus" data-id="${p.id}" aria-label="Restar uno">−</button><span>Stock: ${p.stock}${p.stock<=2?' ⚠':''}</span>${w?`<button data-a="plus" data-id="${p.id}" aria-label="Sumar uno">+</button>`:''}<button data-a="nmov" data-id="${p.id}" aria-label="Cantidad">±</button></div></div>
+${w?`<button class="x ed" data-a="eprod" data-id="${p.id}" aria-label="Editar">✏️</button><button class="x" data-a="dprod" data-id="${p.id}" aria-label="Eliminar">✕</button>`:''}</div>`).join('')||'<p class="empty">Sin resultados.</p>'}
+$('q').oninput=()=>{clearTimeout(tm);tm=setTimeout(drawProds,200)};
+
+async function mover(id,tipo,n){
+ const s=await q(sb.rpc('mover_stock',{p_producto:id,p_tipo:tipo,p_cantidad:n}));
+ items.find(x=>x.id===id).stock=s;drawProds()}
+
+const prep=f=>new Promise((ok,ko)=>{const u=URL.createObjectURL(f),i=new Image();
+ i.onload=()=>{URL.revokeObjectURL(u);const c=$('cv'),x=c.getContext('2d'),s=Math.min(i.width,i.height);
+  x.fillStyle='#fff';x.fillRect(0,0,224,224);x.drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,224,224);ok(c.toDataURL('image/jpeg',.6))};
+ i.onerror=()=>{URL.revokeObjectURL(u);ko(Error('No se pudo leer la imagen.'))};i.src=u});
+
+$('f-prod').onsubmit=async e=>{e.preventDefault();const b=$('pbtn');b.disabled=true;
+ try{const id=$('pid').value,old=items.find(p=>p.id===id);
+  const v={codigo:$('pc').value.trim(),nombre:$('pn').value.trim(),tallas:$('pt').value.trim(),foto:old?old.foto:null};
+  const f=$('pf').files[0];if(f)v.foto=await prep(f);
+  if(id)await q(sb.from('productos').update(v).eq('id',id));
+  else{const stock=parseInt($('pq').value,10);if(!(stock>=0))throw Error('Stock inválido.');
+   await q(sb.from('productos').insert({...v,stock,org_id:me.org_id,seccion_id:sec.id}))}
+  e.target.reset();$('pid').value='';$('f-prod').classList.add('hide');await loadProds()
+ }catch(err){alert(err.code==='23505'?'Ese código ya existe en esta sección.':err.message)}finally{b.disabled=false}};
+
+/* ---------- Tiempo real ---------- */
+function listen(){if(ch)return;
+ ch=sb.channel('inv').on('postgres_changes',{event:'*',schema:'public',table:'productos'},()=>{
+  clearTimeout(tm);tm=setTimeout(()=>{if(sec&&$('v-prod').classList.contains('on'))loadProds()},400)}).subscribe()}
+</script>
+</body></html>
