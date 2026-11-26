@@ -66,7 +66,7 @@ input,select{width:100%;padding:10px;background:#0d1117;border:1px solid var(--b
 
 <section class="view" id="v-home">
 <div class="top"><div><h1>⭐ Orión</h1><div class="st" id="who" style="text-align:left"></div></div>
-<div class="row"><button class="ic" id="bman" data-a="manage" title="Configuración" aria-label="Configuración">⚙️</button>
+<div class="row"><button class="ic hide" id="bstat" data-a="stats" title="Resumen" aria-label="Resumen">📊</button><button class="ic" id="bman" data-a="manage" title="Configuración" aria-label="Configuración">⚙️</button>
 <button class="ic" data-a="out" title="Salir" aria-label="Salir">🔒</button></div></div>
 <div class="grid" id="grid"></div>
 </section>
@@ -94,12 +94,27 @@ input,select{width:100%;padding:10px;background:#0d1117;border:1px solid var(--b
 <label for="pc">Código</label><input id="pc" maxlength="30" required>
 <label for="pn">Nombre / Modelo</label><input id="pn" maxlength="80" required>
 <label for="pt">Tallas</label><input id="pt" maxlength="60" placeholder="22, 24, 25" required>
+<div id="ppw" class="hide"><label for="pp">Precio de venta</label><input id="pp" type="number" min="0" step="0.01"></div>
 <div id="pqw"><label for="pq">Stock inicial</label><input id="pq" type="number" min="0" step="1" required></div>
 <label for="pf">Foto (opcional)</label><input id="pf" type="file" accept="image/*">
 <button class="btn" id="pbtn">Guardar artículo</button></form>
 <input id="q" type="search" placeholder="Buscar por nombre, código o talla" aria-label="Buscar" style="margin-bottom:8px">
 <div class="st" id="tot"></div>
 <div class="list" id="plist"></div>
+</section>
+
+<section class="view" id="v-stats">
+<div class="top"><div><button class="link" data-a="home">‹ Volver</button><h1>Resumen</h1></div>
+<button class="pill" data-a="csv">Exportar CSV</button></div>
+<div class="box"><b id="sm" style="text-transform:capitalize"></b>
+<div class="grid" style="margin-top:12px"><div><div class="st">Unidades vendidas</div><h1 id="su" style="text-align:center">-</h1></div>
+<div><div class="st">Ventas registradas</div><h1 id="sv" style="text-align:center">-</h1></div></div>
+<div class="st" style="margin-top:10px">Ingresos del mes: <b id="si">-</b></div></div>
+<div class="st">Más vendidos del mes</div><div class="list" id="stop"></div>
+<div class="row" style="margin:16px 0 8px"><label for="th" style="margin:0;white-space:nowrap">Poco stock: hasta</label><input id="th" type="number" min="0" value="2" style="width:80px"><span class="st">uds</span></div>
+<div class="list" id="slow"></div>
+<div class="st" style="margin-top:16px">Movimientos del mes (toca Corregir si hubo un error)</div>
+<div class="list" id="smov"></div>
 </section>
 
 </div>
@@ -129,7 +144,7 @@ async function enter(){
  me=await q(sb.from('perfiles').select('nombre,rol,org_id,organizaciones(nombre)').eq('id',user.id).maybeSingle());
  if(!me)return go('setup');
  me.org=me.organizaciones?.nombre||'';
- $('bman').classList.toggle('hide',!can());
+ $('bman').classList.toggle('hide',!can());$('bstat').classList.toggle('hide',me.rol!=='admin');
  listen();go('home')}
 
 $('ltoggle').onclick=()=>{reg=!reg;$('lbtn').textContent=reg?'Crear cuenta':'Entrar';$('ltoggle').textContent=reg?'Ya tengo cuenta':'Crear cuenta nueva';msg('')};
@@ -150,7 +165,7 @@ async function salir(){if(ch){sb.removeChannel(ch);ch=null}await sb.auth.signOut
 
 /* ---------- Navegación ---------- */
 function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));
- if(v==='home')drawHome();if(v==='manage')drawManage()}
+ if(v==='home')drawHome();if(v==='manage')drawManage();if(v==='stats')drawStats()}
 document.addEventListener('click',e=>{const a=e.target.closest('[data-a]'),s=e.target.closest('[data-s]');
  if(a)act(a.dataset.a,a);else if(s)openSec(s.dataset.s)});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.s)openSec(e.target.dataset.s)});
@@ -170,13 +185,13 @@ async function drawManage(){
 async function act(a,el){const id=el.dataset.id;try{switch(a){
  case'reload':location.reload();break;
  case'home':go('home');break;
- case'manage':go('manage');break;
+ case'manage':go('manage');break;case'stats':go('stats');break;case'csv':exportCsv();break;case'corr':await corregir(id);break;
  case'out':await salir();break;
  case'newsec':$('f-sec').reset();$('sid').value='';$('sbtn').textContent='Guardar sección';$('f-sec').classList.remove('hide');break;
  case'esec':{const c=cats.find(x=>x.id===id);$('sid').value=id;$('sic').value=c.icono;$('snm').value=c.nombre;$('sbtn').textContent='Actualizar sección';$('f-sec').classList.remove('hide');break}
  case'dsec':if(confirm('¿Eliminar esta sección y todos sus artículos?')){await q(sb.from('secciones').delete().eq('id',id));await drawManage()}break;
  case'newprod':{const f=$('f-prod'),was=!f.classList.contains('hide')&&!$('pid').value;f.reset();$('pid').value='';$('pqw').classList.remove('hide');$('pq').required=true;$('pbtn').textContent='Guardar artículo';f.classList.toggle('hide',was);break}
- case'eprod':{const p=items.find(x=>x.id===id);$('pid').value=id;$('pc').value=p.codigo;$('pn').value=p.nombre;$('pt').value=p.tallas;$('pf').value='';$('pqw').classList.add('hide');$('pq').required=false;$('pbtn').textContent='Actualizar artículo';$('f-prod').classList.remove('hide');scrollTo(0,0);break}
+ case'eprod':{const p=items.find(x=>x.id===id);$('pid').value=id;$('pc').value=p.codigo;$('pn').value=p.nombre;$('pt').value=p.tallas;$('pp').value=p.precio??'';$('pf').value='';$('pqw').classList.add('hide');$('pq').required=false;$('pbtn').textContent='Actualizar artículo';$('f-prod').classList.remove('hide');scrollTo(0,0);break}
  case'dprod':if(confirm('¿Eliminar este artículo?')){await q(sb.from('productos').delete().eq('id',id));await loadProds()}break;
  case'minus':await mover(id,'venta',1);break;
  case'plus':await mover(id,'entrada',1);break;
@@ -194,16 +209,19 @@ $('f-mem').onsubmit=async e=>{e.preventDefault();
 
 /* ---------- Productos ---------- */
 async function openSec(id){sec=cats.find(c=>c.id===id);$('ptitle').textContent=sec.icono+' '+sec.nombre;
- $('q').value='';$('f-prod').classList.add('hide');$('bnew').classList.toggle('hide',!can());go('prod');await loadProds()}
+ $('q').value='';$('f-prod').classList.add('hide');$('ppw').classList.toggle('hide',me.rol!=='admin');$('bnew').classList.toggle('hide',!can());go('prod');await loadProds()}
 async function loadProds(){
- try{items=await q(sb.from('productos').select('*').eq('seccion_id',sec.id).order('nombre'));drawProds()}
+ try{items=await q(sb.from('productos').select('*').eq('seccion_id',sec.id).order('nombre'));
+  if(me.rol==='admin'&&items.length){const pr=await q(sb.from('precios').select('producto_id,precio').in('producto_id',items.map(p=>p.id)));
+   const m=Object.fromEntries(pr.map(r=>[r.producto_id,r.precio]));items.forEach(p=>p.precio=Number(m[p.id]||0))}
+  drawProds()}
  catch(err){$('plist').innerHTML=`<p class="empty err">${E(err.message)}</p>`}}
 function drawProds(){
  const s=$('q').value.toLowerCase().trim(),w=can();
  const arr=items.filter(p=>[p.nombre,p.codigo,p.tallas].some(v=>(v||'').toLowerCase().includes(s)));
  $('tot').textContent=`${items.length} artículos · ${items.reduce((n,p)=>n+p.stock,0)} uds en total`;
  $('plist').innerHTML=arr.map(p=>`<div class="item"><img src="${E(p.foto&&p.foto.startsWith('data:image/')?p.foto:PH)}" alt="">
-<div class="inf"><b>${E(p.nombre)}</b><small>${E(p.codigo)} · Tallas: ${E(p.tallas)}</small>
+<div class="inf"><b>${E(p.nombre)}</b><small>${E(p.codigo)} · Tallas: ${E(p.tallas)}${me.rol==='admin'?' · '+money(p.precio):''}</small>
 <div class="qty ${p.stock<=2?'low':''}"><button data-a="minus" data-id="${p.id}" aria-label="Restar uno">−</button><span>Stock: ${p.stock}${p.stock<=2?' ⚠':''}</span>${w?`<button data-a="plus" data-id="${p.id}" aria-label="Sumar uno">+</button>`:''}<button data-a="nmov" data-id="${p.id}" aria-label="Cantidad">±</button></div></div>
 ${w?`<button class="x ed" data-a="eprod" data-id="${p.id}" aria-label="Editar">✏️</button><button class="x" data-a="dprod" data-id="${p.id}" aria-label="Eliminar">✕</button>`:''}</div>`).join('')||'<p class="empty">Sin resultados.</p>'}
 $('q').oninput=()=>{clearTimeout(tm);tm=setTimeout(drawProds,200)};
@@ -221,11 +239,51 @@ $('f-prod').onsubmit=async e=>{e.preventDefault();const b=$('pbtn');b.disabled=t
  try{const id=$('pid').value,old=items.find(p=>p.id===id);
   const v={codigo:$('pc').value.trim(),nombre:$('pn').value.trim(),tallas:$('pt').value.trim(),foto:old?old.foto:null};
   const f=$('pf').files[0];if(f)v.foto=await prep(f);
-  if(id)await q(sb.from('productos').update(v).eq('id',id));
+  let nid=id;if(id)await q(sb.from('productos').update(v).eq('id',id));
   else{const stock=parseInt($('pq').value,10);if(!(stock>=0))throw Error('Stock inválido.');
-   await q(sb.from('productos').insert({...v,stock,org_id:me.org_id,seccion_id:sec.id}))}
+   nid=(await q(sb.from('productos').insert({...v,stock,org_id:me.org_id,seccion_id:sec.id}).select('id').single())).id}
+  if(me.rol==='admin'){const pv=parseFloat($('pp').value);if(pv>=0)await q(sb.from('precios').upsert({producto_id:nid,org_id:me.org_id,precio:pv}))}
   e.target.reset();$('pid').value='';$('f-prod').classList.add('hide');await loadProds()
  }catch(err){alert(err.code==='23505'?'Ese código ya existe en esta sección.':err.message)}finally{b.disabled=false}};
+
+/* ---------- Resumen (solo administrador) ---------- */
+const money=n=>'$'+Number(n||0).toFixed(2);
+let rpt={vend:[],bajo:[]};
+async function drawStats(){
+ const ini=new Date();ini.setDate(1);ini.setHours(0,0,0,0);
+ $('sm').textContent=ini.toLocaleDateString('es',{month:'long',year:'numeric'});
+ try{let all=[],f=0;
+  for(;;){const r=await q(sb.from('movimientos').select('id,tipo,codigo,nombre,cantidad,precio,anulado,cantidad_original,motivo,usuario_id,producto_id,creado').gte('creado',ini.toISOString()).order('id').range(f,f+999));
+   all=all.concat(r);if(r.length<1000)break;f+=1000}
+  const vs=all.filter(x=>x.tipo==='venta'&&!x.anulado),m={};
+  vs.forEach(x=>{const k=x.codigo||'(eliminado)';const r=(m[k]=m[k]||{codigo:k,nombre:x.nombre||'',u:0,i:0});r.u+=x.cantidad;r.i+=x.cantidad*Number(x.precio||0)});
+  rpt.vend=Object.values(m).sort((a,b)=>b.u-a.u);
+  $('su').textContent=vs.reduce((n,x)=>n+x.cantidad,0);$('sv').textContent=vs.length;
+  $('si').textContent=money(vs.reduce((n,x)=>n+x.cantidad*Number(x.precio||0),0));
+  const pers=await q(sb.from('perfiles').select('id,nombre')),who=Object.fromEntries(pers.map(p=>[p.id,p.nombre||'Usuario']));
+  $('smov').innerHTML=all.sort((a,b)=>b.id-a.id).slice(0,50).map(x=>`<div class="item"><div class="inf"><b style="${x.anulado?'text-decoration:line-through':''}">${x.tipo==='venta'?'Venta':'Entrada'} · ${x.cantidad} × ${E(x.nombre)}</b><small>${new Date(x.creado).toLocaleString()} · ${E(who[x.usuario_id]||'Usuario')}${x.anulado?' · ANULADO':x.cantidad_original?' · corregido (era '+x.cantidad_original+')':''}${x.motivo?' · '+E(x.motivo):''}</small></div>${x.anulado||!x.producto_id?'':`<button class="pill" data-a="corr" data-id="${x.id}">Corregir</button>`}</div>`).join('')||'<p class="empty">Sin movimientos este mes.</p>';
+  $('stop').innerHTML=rpt.vend.slice(0,10).map(r=>`<div class="item"><div class="inf"><b>${E(r.nombre)}</b><small>${E(r.codigo)}</small></div><b>${r.u} uds · ${money(r.i)}</b></div>`).join('')||'<p class="empty">Sin ventas este mes.</p>';
+  await drawLow()
+ }catch(err){alert(err.message)}}
+async function drawLow(){
+ const t=Math.max(0,parseInt($('th').value,10)||0);
+ rpt.bajo=await q(sb.from('productos').select('codigo,nombre,tallas,stock,secciones(nombre)').lte('stock',t).order('stock').order('nombre'));
+ $('slow').innerHTML=rpt.bajo.map(p=>`<div class="item"><div class="inf"><b>${E(p.nombre)}</b><small>${E(p.codigo)} · ${E(p.secciones?.nombre||'')} · Tallas: ${E(p.tallas)}</small></div><b class="${p.stock===0?'err':''}">${p.stock===0?'AGOTADO':p.stock+' uds'}</b></div>`).join('')||'<p class="empty">Nada por debajo de ese nivel.</p>'}
+$('th').onchange=()=>drawLow().catch(e=>alert(e.message));
+function exportCsv(){
+ const c=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+ const rows=[['VENTAS DEL MES'],['Código','Nombre','Unidades vendidas','Ingresos'],...rpt.vend.map(r=>[r.codigo,r.nombre,r.u,r.i]),[],['POCO STOCK'],['Código','Nombre','Sección','Tallas','Stock'],...rpt.bajo.map(p=>[p.codigo,p.nombre,p.secciones?.nombre,p.tallas,p.stock])];
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.map(r=>r.map(c).join(',')).join('\n')],{type:'text/csv;charset=utf-8'}));
+ a.download='orion-resumen-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1e4)}
+
+async function corregir(id){
+ const n=prompt('Cantidad correcta (0 = anular el movimiento):');if(n===null)return;
+ const c=parseInt(n,10);if(!(c>=0))return alert('Cantidad inválida.');
+ const mo=prompt('Motivo de la corrección:')||'';
+ const s=await q(sb.rpc('corregir_movimiento',{p_id:Number(id),p_cantidad:c,p_motivo:mo}));
+ alert('Corregido. Stock actual: '+s);await drawStats()}
 
 /* ---------- Tiempo real ---------- */
 function listen(){if(ch)return;
